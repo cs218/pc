@@ -1,0 +1,478 @@
+EX :1    
+
+_global_ void sumArraysOnGPU(float *A, float *B, float *C, const int N)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) 
+	C[i] = A[i] + B[i];
+}
+
+EX :2
+
+Float Matrix Addition 
+
+_global_ void sumMatrixOnGPU2D(float *MatA, float *MatB, float *MatC, int nx, int ny)
+{
+    unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int iy = threadIdx.y + blockIdx.y * blockDim.y;
+    unsigned int idx = iy * nx + ix;
+    if (ix < nx && iy < ny)
+        MatC[idx] = MatA[idx] + MatB[idx];
+}
+
+Integer Matrix Addition
+
+_global_ void sumMatrixOnGPU2D(int *MatA, int *MatB, int *MatC, int nx, int ny)
+{
+    unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int iy = threadIdx.y + blockIdx.y * blockDim.y;
+    unsigned int idx = iy * nx + ix;
+
+    if (ix < nx && iy < ny)
+        MatC[idx] = MatA[idx] + MatB[idx];
+}
+
+EX :3
+
+ReduceUnrolling8 
+
+_global_ void reduceUnrolling8 (int *g_idata, int *g_odata, unsigned int n)
+{
+    // set thread ID
+    unsigned int tid = threadIdx.x;
+    unsigned int idx = blockIdx.x * blockDim.x * 8 + threadIdx.x;
+
+    // convert global data pointer to the local pointer of this block
+    int *idata = g_idata + blockIdx.x * blockDim.x * 8;
+
+    // unrolling 8
+    if (idx + 7 * blockDim.x < n)
+    {
+        int a1 = g_idata[idx];
+        int a2 = g_idata[idx + blockDim.x];
+        int a3 = g_idata[idx + 2 * blockDim.x];
+        int a4 = g_idata[idx + 3 * blockDim.x];
+        int b1 = g_idata[idx + 4 * blockDim.x];
+        int b2 = g_idata[idx + 5 * blockDim.x];
+        int b3 = g_idata[idx + 6 * blockDim.x];
+        int b4 = g_idata[idx + 7 * blockDim.x];
+        g_idata[idx] = a1 + a2 + a3 + a4 + b1 + b2 + b3 + b4;
+    }
+
+    __syncthreads();
+
+    // in-place reduction in global memory
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+    {
+        if (tid < stride)
+        {
+            idata[tid] += idata[tid + stride];
+        }
+
+        // synchronize within threadblock
+        __syncthreads();
+    }
+
+    // write result for this block to global mem
+    if (tid == 0) g_odata[blockIdx.x] = idata[0];
+}
+
+ReduceUnrolling16
+
+_global_ void reduceUnrolling16 (int *g_idata, int *g_odata, unsigned int n)
+{
+    // set thread ID
+    unsigned int tid = threadIdx.x;
+    unsigned int idx = blockIdx.x * blockDim.x * 16 + threadIdx.x;
+
+    // convert global data pointer to the local pointer of this block
+    int *idata = g_idata + blockIdx.x * blockDim.x * 16;
+
+    // unrolling 16
+    if (idx + 15 * blockDim.x < n)
+    {
+        int a1 = g_idata[idx];
+        int a2 = g_idata[idx + blockDim.x];
+        int a3 = g_idata[idx + 2 * blockDim.x];
+        int a4 = g_idata[idx + 3 * blockDim.x];
+        int b1 = g_idata[idx + 4 * blockDim.x];
+        int b2 = g_idata[idx + 5 * blockDim.x];
+        int b3 = g_idata[idx + 6 * blockDim.x];
+        int b4 = g_idata[idx + 7 * blockDim.x];
+        int c1 = g_idata[idx + 8 * blockDim.x];
+        int c2 = g_idata[idx + 9 * blockDim.x];
+        int c3 = g_idata[idx + 10 * blockDim.x];
+        int c4 = g_idata[idx + 11 * blockDim.x];
+        int d1 = g_idata[idx + 12 * blockDim.x];
+        int d2 = g_idata[idx + 13 * blockDim.x];
+        int d3 = g_idata[idx + 14 * blockDim.x];
+        int d4 = g_idata[idx + 15 * blockDim.x];
+        g_idata[idx] = a1 + a2 + a3 + a4 + b1 + b2 + b3 + b4 + c1 + c2 + c3 + c4 + d1 + d2 + d3 + d4;
+    }
+
+    __syncthreads();
+
+    // in-place reduction in global memory
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+    {
+        if (tid < stride)
+        {
+            idata[tid] += idata[tid + stride];
+        }
+
+        // synchronize within threadblock
+        __syncthreads();
+    }
+
+    // write result for this block to global mem
+    if (tid == 0) g_odata[blockIdx.x] = idata[0];
+}
+
+EX :4
+
+With Memset
+
+_global_ void sumMatrixGPU(float *MatA, float *MatB, float *MatC, int nx,
+                             int ny)
+{
+    unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int iy = threadIdx.y + blockIdx.y * blockDim.y;
+    unsigned int idx = iy * nx + ix;
+
+    if (ix < nx && iy < ny)
+    {
+        MatC[idx] = MatA[idx] + MatB[idx];
+    }
+}
+
+
+Without Memset
+
+_global_ void sumMatrixGPU(float *MatA, float *MatB, float *MatC, int nx,
+                             int ny)
+{
+    unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int iy = threadIdx.y + blockIdx.y * blockDim.y;
+    unsigned int idx = iy * nx + ix;
+
+    if (ix < nx && iy < ny)
+    {
+        MatC[idx] = MatA[idx] + MatB[idx];
+    }
+}
+
+EX :5
+
+_global_ void matrixMultiply(int *a, int *b, int *c, int size)
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    int sum = 0;
+    for (int k = 0; k < size; ++k)
+    {
+        sum += a[row * size + k] * b[k * size + col];
+    }
+
+    c[row * size + col] = sum;
+}
+
+EX :6
+
+_global_ void setRowReadRow(int *out)
+{
+    // static shared memory
+    _shared_ int tile[BDIMY][BDIMX];
+
+    // mapping from thread index to global memory index
+    unsigned int idx = threadIdx.y * blockDim.x + threadIdx.x;
+
+    // shared memory store operation
+    tile[threadIdx.y][threadIdx.x] = idx;
+
+    // wait for all threads to complete
+    __syncthreads();
+
+    // shared memory load operation
+    out[idx] = tile[threadIdx.y][threadIdx.x] ;
+}
+
+_global_ void setColReadCol(int *out)
+{
+    // static shared memory
+    _shared_ int tile[BDIMX][BDIMY];
+
+    // mapping from thread index to global memory index
+    unsigned int idx = threadIdx.y * blockDim.x + threadIdx.x;
+
+    // shared memory store operation
+    tile[threadIdx.x][threadIdx.y] = idx;
+
+    // wait for all threads to complete
+    __syncthreads();
+
+    // shared memory load operation
+    out[idx] = tile[threadIdx.x][threadIdx.y];
+}
+
+_global_ void setColReadCol2(int *out)
+{
+    // static shared memory
+    _shared_ int tile[BDIMY][BDIMX];
+
+    // mapping from 2D thread index to linear memory
+    unsigned int idx = threadIdx.y * blockDim.x + threadIdx.x;
+
+    // convert idx to transposed coordinate (row, col)
+    unsigned int irow = idx / blockDim.y;
+    unsigned int icol = idx % blockDim.y;
+
+    // shared memory store operation
+    tile[icol][irow] = idx;
+
+    // wait for all threads to complete
+    __syncthreads();
+
+    // shared memory load operation
+    out[idx] = tile[icol][irow] ;
+}
+
+_global_ void setRowReadCol(int *out)
+{
+    // static shared memory
+    _shared_ int tile[BDIMY][BDIMX];
+
+    // mapping from 2D thread index to linear memory
+    unsigned int idx = threadIdx.y * blockDim.x + threadIdx.x;
+
+    // convert idx to transposed coordinate (row, col)
+    unsigned int irow = idx / blockDim.y;
+    unsigned int icol = idx % blockDim.y;
+
+    // shared memory store operation
+    tile[threadIdx.y][threadIdx.x] = idx;
+
+    // wait for all threads to complete
+    __syncthreads();
+
+    // shared memory load operation
+    out[idx] = tile[icol][irow];
+}
+
+_global_ void setRowReadColPad(int *out)
+{
+    // static shared memory
+    _shared_ int tile[BDIMY][BDIMX + IPAD];
+
+    // mapping from 2D thread index to linear memory
+    unsigned int idx = threadIdx.y * blockDim.x + threadIdx.x;
+
+    // convert idx to transposed (row, col)
+    unsigned int irow = idx / blockDim.y;
+    unsigned int icol = idx % blockDim.y;
+
+    // shared memory store operation
+    tile[threadIdx.y][threadIdx.x] = idx;
+
+    // wait for all threads to complete
+    __syncthreads();
+
+    // shared memory load operation
+    out[idx] = tile[icol][irow] ;
+}
+
+_global_ void setRowReadColDyn(int *out)
+{
+    // dynamic shared memory
+    extern  _shared_ int tile[];
+
+    // mapping from thread index to global memory index
+    unsigned int idx = threadIdx.y * blockDim.x + threadIdx.x;
+
+    // convert idx to transposed (row, col)
+    unsigned int irow = idx / blockDim.y;
+    unsigned int icol = idx % blockDim.y;
+
+    // convert back to smem idx to access the transposed element
+    unsigned int col_idx = icol * blockDim.x + irow;
+
+    // shared memory store operation
+    tile[idx] = idx;
+
+    // wait for all threads to complete
+    __syncthreads();
+
+    // shared memory load operation
+    out[idx] = tile[col_idx];
+}
+
+_global_ void setRowReadColDynPad(int *out)
+{
+    // dynamic shared memory
+    extern  _shared_ int tile[];
+
+    // mapping from thread index to global memory index
+    unsigned int g_idx = threadIdx.y * blockDim.x + threadIdx.x;
+
+    // convert idx to transposed (row, col)
+    unsigned int irow = g_idx / blockDim.y;
+    unsigned int icol = g_idx % blockDim.y;
+
+    unsigned int row_idx = threadIdx.y * (blockDim.x + IPAD) + threadIdx.x;
+
+    // convert back to smem idx to access the transposed element
+    unsigned int col_idx = icol * (blockDim.x + IPAD) + irow;
+
+    // shared memory store operation
+    tile[row_idx] = g_idx;
+
+    // wait for all threads to complete
+    __syncthreads();
+
+    // shared memory load operation
+    out[g_idx] = tile[col_idx];
+}
+
+
+
+#Alter
+
+
+
+
+__global__ void warmup(float *out, float *in, const int nx, const int ny)
+{
+    unsigned int ix = blockDim.x * blockIdx.x + threadIdx.x;
+    unsigned int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (ix < nx && iy < ny)
+    {
+        out[iy * nx + ix] = in[iy * nx + ix];
+    }
+}
+
+// case 0 copy kernel: access data in rows
+__global__ void copyRow(float *out, float *in, const int nx, const int ny)
+{
+    unsigned int ix = blockDim.x * blockIdx.x + threadIdx.x;
+    unsigned int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (ix < nx && iy < ny)
+    {
+        out[iy * nx + ix] = in[iy * nx + ix];
+    }
+}
+
+// case 1 copy kernel: access data in columns
+__global__ void copyCol(float *out, float *in, const int nx, const int ny)
+{
+    unsigned int ix = blockDim.x * blockIdx.x + threadIdx.x;
+    unsigned int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (ix < nx && iy < ny)
+    {
+        out[ix * ny + iy] = in[ix * ny + iy];
+    }
+}
+
+// case 2 transpose kernel: read in rows and write in columns
+__global__ void transposeNaiveRow(float *out, float *in, const int nx,
+                                  const int ny)
+{
+    unsigned int ix = blockDim.x * blockIdx.x + threadIdx.x;
+    unsigned int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (ix < nx && iy < ny)
+    {
+        out[ix * ny + iy] = in[iy * nx + ix];
+    }
+}
+
+// case 3 transpose kernel: read in columns and write in rows
+__global__ void transposeNaiveCol(float *out, float *in, const int nx,
+                                  const int ny)
+{
+    unsigned int ix = blockDim.x * blockIdx.x + threadIdx.x;
+    unsigned int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (ix < nx && iy < ny)
+    {
+        out[iy * nx + ix] = in[ix * ny + iy];
+    }
+}
+
+// case 4 transpose kernel: read in rows and write in columns + unroll 4 blocks
+__global__ void transposeUnroll4Row(float *out, float *in, const int nx,
+                                    const int ny)
+{
+    unsigned int ix = blockDim.x * blockIdx.x * 4 + threadIdx.x;
+    unsigned int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    unsigned int ti = iy * nx + ix; // access in rows
+    unsigned int to = ix * ny + iy; // access in columns
+
+    if (ix + 3 * blockDim.x < nx && iy < ny)
+    {
+        out[to]                   = in[ti];
+        out[to + ny * blockDim.x]   = in[ti + blockDim.x];
+        out[to + ny * 2 * blockDim.x] = in[ti + 2 * blockDim.x];
+        out[to + ny * 3 * blockDim.x] = in[ti + 3 * blockDim.x];
+    }
+}
+
+// case 5 transpose kernel: read in columns and write in rows + unroll 4 blocks
+__global__ void transposeUnroll4Col(float *out, float *in, const int nx,
+                                    const int ny)
+{
+    unsigned int ix = blockDim.x * blockIdx.x * 4 + threadIdx.x;
+    unsigned int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    unsigned int ti = iy * nx + ix; // access in rows
+    unsigned int to = ix * ny + iy; // access in columns
+
+    if (ix + 3 * blockDim.x < nx && iy < ny)
+    {
+        out[ti]                = in[to];
+        out[ti +   blockDim.x] = in[to +   blockDim.x * ny];
+        out[ti + 2 * blockDim.x] = in[to + 2 * blockDim.x * ny];
+        out[ti + 3 * blockDim.x] = in[to + 3 * blockDim.x * ny];
+    }
+}
+
+/*
+ * case 6 :  transpose kernel: read in rows and write in colunms + diagonal
+ * coordinate transform
+ */
+__global__ void transposeDiagonalRow(float *out, float *in, const int nx,
+                                     const int ny)
+{
+    unsigned int blk_y = blockIdx.x;
+    unsigned int blk_x = (blockIdx.x + blockIdx.y) % gridDim.x;
+
+    unsigned int ix = blockDim.x * blk_x + threadIdx.x;
+    unsigned int iy = blockDim.y * blk_y + threadIdx.y;
+
+    if (ix < nx && iy < ny)
+    {
+        out[ix * ny + iy] = in[iy * nx + ix];
+    }
+}
+
+/*
+ * case 7 :  transpose kernel: read in columns and write in row + diagonal
+ * coordinate transform.
+ */
+__global__ void transposeDiagonalCol(float *out, float *in, const int nx,
+                                     const int ny)
+{
+    unsigned int blk_y = blockIdx.x;
+    unsigned int blk_x = (blockIdx.x + blockIdx.y) % gridDim.x;
+
+    unsigned int ix = blockDim.x * blk_x + threadIdx.x;
+    unsigned int iy = blockDim.y * blk_y + threadIdx.y;
+
+    if (ix < nx && iy < ny)
+    {
+        out[iy * nx + ix] = in[ix * ny + iy];
+    }
+}
